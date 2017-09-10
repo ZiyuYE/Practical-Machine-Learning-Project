@@ -1,0 +1,151 @@
+---
+title: ''
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+##Introduction
+
+In this project, various machine learning algorithms are used to make predictions of 20 test cases of the manner in which they did the exercise based on given data sets, the algorithms are including KNN, classification tree and Random Forests, training data is splited into training part and validation part,  5-folds cross validation is applied to obtain best models and then using validation part to obtain out of sample error rate, at last, with algorithm given lowest out of sample error rate making predictions on testing data.
+
+
+
+##Load data
+
+After downloding data from given websites, load them into R environment, also, load required packge, note that, there are lots of missing values with NAs and blanks:
+
+```{r}
+train.data = read.csv("C:/Users/Administrator/Desktop/pml-training.csv", na.strings = c("NA",""))
+test.data = read.csv("C:/Users/Administrator/Desktop/pml-testing.csv",na.strings = c("NA",""))
+library(e1071)
+library(randomForest)
+library(class)
+dim(train.data)
+dim(test.data)
+```
+
+There are 19622 observations in training data and 20 observations in testing data, both of them have 160 variables, the variable 'classe' is response in training data but missing in testing data while variable 'problem_id' is only in testing data. 
+
+##Prepare data
+
+Before modeling, data should be cleaned, as there are lots of missing values, we first check the missing values:
+
+```{r}
+res = sapply(train.data, function(x) sum(is.na(x)))
+barplot(res)
+```
+
+From the bar plot, it can be seen there are variables with lots of  missing values
+and also, there are variables with non-missing values. So we need to remove variables with lots of  missing values:
+
+```{r}
+keep = which(res == 0)
+train.data = train.data[ ,keep]
+test.data = test.data[ ,keep]
+```
+
+Also, we need to drop variables such as 'user_name', 'raw_timestamp' and etc, as these variables are not meaningful for predictions here.
+
+```{r}
+train.data = train.data[ ,8:ncol(train.data)]
+test.data = test.data[ ,8:ncol(test.data)]
+```
+
+At last, we check the distributions of 'classe' variable:
+
+```{r}
+barplot(table(train.data$classe))
+```
+
+So, it can be found that the classes are almost balanced with level A to be little more than others. 
+
+##Machine learning algorithms
+
+Now we build machine learning models, first, we split training data into training part and validation part using a 8/2 partition rule:
+
+```{r}
+set.seed(2017)
+index = sample(1:nrow(train.data),0.8*nrow(train.data),replace = FALSE)
+train.data.train = train.data[index, ]
+train.data.validation = train.data[-index, ]
+```
+
+
+###KNN
+
+We beginning with KNN method, and tune the parameter K which is number of neighbours considered in k-Nearest Neighbour Classification:
+
+```{r}
+model.knn = tune.knn(train.data.train[,-53], train.data.train[,53] , k = 1:5, data =  train.data.train, tunecontrol = tune.control(cross = 5))
+model.knn
+```
+
+
+
+It can be found the best parameter is k = 1 using 5-fold cross validation, the best performance is error rate to be around 0.05 in my run time.
+
+
+###Classification Tree
+
+then using Classification Tree, the parameter is minsplit to be tuned:
+
+```{r}
+model.rpart = tune.rpart(classe ~ ., minsplit = c(5,10,15), data =  train.data.train, tunecontrol = tune.control(cross = 5))
+model.rpart
+```
+
+
+
+It can be found the best parameter is minsplit = 5 using 5-fold cross validation, the best performance is error rate to be around 0.25 in my run time.
+
+
+###Random Forests
+
+the parameter isnNumber of variables mtry to be tuned using Random Forests:
+
+```{r}
+model.rf = tune.randomForest(train.data.train[,-53], train.data.train[,53] , mtry = c(5,10,20,30,40,50), data =  train.data.train, tunecontrol = tune.control(cross = 5))
+model.rf
+```
+
+
+
+It can be found the best parameter is mtry = 10 using 5-fold cross validation, the best performance is error rate to be around 0.006 in my run time. So the lowest error rate of cross validation is ranfom forest, the error rate plot for the tuned parameter mtry of ranfom forest is:
+
+```{r}
+plot(model.rf)
+```
+
+
+
+
+###Out of sample error
+
+The above results show the error rates of 5-fold cross validations for each of the 3 methods, then we compute Out of sample errors for these methods:
+
+```{r}
+knn.m = knn(train.data.train[,-53], train.data.validation[,-53], train.data.train[,53], k = 1 )
+mean(knn.m != train.data.validation$classe)
+mean(predict(model.rpart$best.model, train.data.validation, type = "class") != train.data.validation$classe)
+mean(predict(model.rf$best.model, train.data.validation) != train.data.validation$classe)
+```
+
+So it can be seen, the Out of sample error using Random Forest is lowest, thus, we use Random Forest as the optimal method to make predictions on testing data.
+
+##Results
+
+Finally, we make predictions with optimal model Random Forest found in previous analysis, the results are:
+
+```{r}
+predict(model.rf$best.model, test.data) 
+```
+
+
+
+
+
+
+
